@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html lang="ko" xmlns:th="http://www.thymeleaf.org">
+<head><meta charset="UTF-8"/><title>로그인 처리중</title></head>
+<body>
+<p>로그인 처리 중...</p>
+<script>
+const params = new URLSearchParams(location.search);
+const token  = params.get('token');
+if (token) {
+    sessionStorage.setItem('accessToken', token);
+    location.replace('/todos');
+} else {
+    location.replace('/login?error');
+}
+</script>
+</body>
+</html>

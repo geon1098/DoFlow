@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="ko" xmlns:th="http://www.thymeleaf.org">
+<head><meta charset="UTF-8"/><title>내 할 일</title>
+<style>
+body{font-family:sans-serif;max-width:760px;margin:40px auto;}
+.todo{border:1px solid #ddd;padding:12px;margin:8px 0;border-radius:6px;}
+.todo .meta{color:#888;font-size:12px;}
+.priority-HIGH{border-left:4px solid #e44;}
+.priority-NORMAL{border-left:4px solid #888;}
+.priority-LOW{border-left:4px solid #ccc;}
+button{margin-right:4px;cursor:pointer;}
+.bell{float:right;font-size:18px;}
+</style></head>
+<body>
+
+<h2>내 할 일
+    <span class="bell">🔔 <span id="unread">0</span></span>
+</h2>
+
+<div>
+    <input id="title" placeholder="제목"/>
+    <input id="dueDate" type="date"/>
+    <select id="priority"><option>LOW</option><option selected>NORMAL</option><option>HIGH</option></select>
+    <button onclick="createTodo()">추가</button>
+</div>
+
+<hr/>
+<div>
+    <select id="filterStatus">
+        <option value="">전체</option><option>TODO</option><option>DOING</option><option>DONE</option>
+    </select>
+    <button onclick="loadTodos()">조회</button>
+</div>
+
+<div id="list"></div>
+
+<script>
+const TOKEN = sessionStorage.getItem('accessToken');
+if (!TOKEN) location.href = '/login';
+
+const authHeader = { 'Authorization': 'Bearer ' + TOKEN, 'Content-Type': 'application/json' };
+
+async function api(method, url, body) {
+    const opt = { method, headers: authHeader, credentials: 'include' };
+    if (body) opt.body = JSON.stringify(body);
+    const res = await fetch(url, opt);
+    if (res.status === 401) { location.href = '/login'; return; }
+    return res.json();
+}
+
+async function loadTodos() {
+    const status = document.getElementById('filterStatus').value;
+    const url = '/api/todos?size=50' + (status ? '&status=' + status : '');
+    const json = await api('GET', url);
+    const list = document.getElementById('list');
+    list.innerHTML = '';
+    json.data.content.forEach(t => {
+        const div = document.createElement('div');
+        div.className = 'todo priority-' + t.priority;
+        // textContent 사용 → XSS 안전
+        const titleSpan = document.createElement('div');
+        titleSpan.innerHTML = '<b></b> <span class="meta"></span>';
+        titleSpan.querySelector('b').textContent = '[' + t.status + '] ' + t.title;
+        titleSpan.querySelector('.meta').textContent =
+            (t.dueDate ? '마감 ' + t.dueDate + ' / ' : '') + '우선순위 ' + t.priority;
+        div.appendChild(titleSpan);
+
+        const btns = document.createElement('div');
+        ['TODO','DOING','DONE'].forEach(s => {
+            if (s !== t.status) {
+                const b = document.createElement('button');
+                b.textContent = '→ ' + s;
+                b.onclick = () => changeStatus(t.id, s);
+                btns.appendChild(b);
+            }
+        });
+        const del = document.createElement('button');
+        del.textContent = '삭제';
+        del.onclick = () => deleteTodo(t.id);
+        btns.appendChild(del);
+
+        div.appendChild(btns);
+        list.appendChild(div);
+    });
+}
+
+async function createTodo() {
+    const body = {
+        title:    document.getElementById('title').value,
+        priority: document.getElementById('priority').value,
+        dueDate:  document.getElementById('dueDate').value || null
+    };
+    await api('POST', '/api/todos', body);
+    document.getElementById('title').value = '';
+    loadTodos();
+}
+
+async function changeStatus(id, status) {
+    const json = await api('PATCH', '/api/todos/' + id + '/status', { status });
+    if (!json.success) alert(json.message);
+    loadTodos();
+}
+
+async function deleteTodo(id) {
+    if (!confirm('삭제할까요?')) return;
+    await api('DELETE', '/api/todos/' + id);
+    loadTodos();
+}
+
+async function loadUnread() {
+    const json = await api('GET', '/api/notifications/unread-count');
+    if (json && json.data) document.getElementById('unread').textContent = json.data.count;
+}
+
+loadTodos();
+loadUnread();
+setInterval(loadUnread, 10000);
+</script>
+</body>
+</html>
